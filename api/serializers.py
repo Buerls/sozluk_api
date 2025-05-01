@@ -80,20 +80,28 @@ class EntrySerializer(serializers.ModelSerializer):
         model = Entry
         fields = [
             'id',
-            'topic', # Sadece topic ID'si
-            # 'topic_title', # Eğer gösterilecekse
-            'author', # Author ID'si
-            'author_username',
+            'topic',
+            # 'topic_title',
+            'author', # Alan listede kalabilir
+            'author_username', # Bu zaten read_only field ile tanımlı
             'content',
             'created_at',
             'updated_at',
-            # Yeni alanları fields listesine ekle:
             'upvotes_count',
             'downvotes_count',
             'current_user_vote',
         ]
-        # read_only_fields listesine eklemeye gerek yok, SerializerMethodField zaten read-only.
-        # read_only_fields = ['author', 'created_at', 'updated_at', 'author_username'] # topic_title da olabilir
+        # --- DEĞİŞİKLİK: 'author' read_only_fields'a eklendi ---
+        read_only_fields = [
+             # author_username, vote fields vb. zaten read_only idi
+             'created_at',
+             'updated_at',
+             'author_username', # Bu satır varsa kalabilir, ReadOnlyField ile tanımlandıysa gereksiz de olabilir
+             'upvotes_count',
+             'downvotes_count',
+             'current_user_vote',
+             'author', # !!! Author ID'sini read-only yap !!!
+        ]
 
     # Örnek: Oy sayılarını hesaplayan metodlar (performans için optimize edilmeli)
     # def get_votes_count(self, obj):

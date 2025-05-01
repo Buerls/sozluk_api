@@ -1,7 +1,8 @@
 # api/views.py
 from django.contrib.auth.models import User # Veya settings.AUTH_USER_MODEL
 from django.db import transaction
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Subquery, Count, Q
+from django.utils import timezone
 from rest_framework import viewsets, permissions, generics, status, serializers, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -53,6 +54,46 @@ class TopicViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
     filter_backends = [filters.SearchFilter]
     search_fields = ['title', 'author__username']
+
+    @action(detail=False, methods=['get'], url_path='popular-today')  # detail=False -> Liste üzerinde çalışır
+    def popular_today(self, request):
+        """
+        Bugün en az bir entry girilmiş başlıkları, entry sayısına göre
+        azalan sırada listeler (örn: ilk 10 tanesi).
+        """
+        # 1. Bugünün başlangıcını ve bitişini (şu an) al
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = timezone.now()
+
+        # 2. Başlıkları annotate et (bugünkü entry sayısıyla)
+        #    ve sadece bugün entry girilenleri filtrele
+        popular_topics_qs = Topic.objects.annotate(
+            # 'entryler' -> Entry modelinden Topic'e olan ForeignKey'in related_name'i
+            # Eğer related_name yoksa 'entry_set' kullanılır. Modelinizi kontrol edin.
+            todays_entry_count=Count(
+                'entries',  # Sayılacak ilişkili model
+                filter=Q(entries__created_at__gte=today_start) & Q(entries__created_at__lte=today_end)
+            )
+        ).filter(
+            todays_entry_count__gt=0  # Bugün en az 1 entry girilmiş olanları al
+        ).order_by(
+            '-todays_entry_count'  # Entry sayısına göre çoktan aza sırala
+        )
+
+        # 3. Sonuçları sınırla (örn: ilk 10)
+        popular_topics_qs = popular_topics_qs[:10]  # İlk 10 taneyi al
+
+        # 4. Veriyi serialize et
+        # get_serializer yerine doğrudan serializer kullanabiliriz, context gerekmiyorsa.
+        # Ancak viewset'in metodunu kullanmak context'i otomatik geçirir (ilerisi için iyi olabilir).
+        serializer = self.get_serializer(popular_topics_qs, many=True)
+        # VEYA: serializer = TopicSerializer(popular_topics_qs, many=True, context={'request': request})
+
+        # 5. Yanıtı döndür
+        return Response(serializer.data)
+
+
+
 
     # get_queryset metodunu override ediyoruz
     def get_queryset(self):
